@@ -1,13 +1,15 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron';
+import { electronApp, is, optimizer } from '@electron-toolkit/utils';
+import { app, BrowserWindow, desktopCapturer, ipcMain, shell, systemPreferences } from 'electron';
 import { join } from 'path';
-import { electronApp, optimizer, is } from '@electron-toolkit/utils';
 import icon from '../../resources/icon.png?asset';
 
 function createWindow(): void {
-  // Create the browser window.
   const mainWindow = new BrowserWindow({
     width: 900,
     height: 670,
+    minHeight: 400,
+    minWidth: 600,
+    useContentSize: true,
     show: false,
     autoHideMenuBar: true,
     ...(process.platform === 'linux' ? { icon } : {}),
@@ -26,8 +28,6 @@ function createWindow(): void {
     return { action: 'deny' };
   });
 
-  // HMR for renderer base on electron-vite cli.
-  // Load the remote URL for development or the local html file for production.
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL']);
   } else {
@@ -51,6 +51,18 @@ app.whenReady().then(() => {
 
   // IPC test
   ipcMain.on('ping', () => console.log('pong'));
+
+  // Audio capture permissions and sources
+  ipcMain.handle('get-desktop-sources', async (_, opts) => {
+    return await desktopCapturer.getSources(opts);
+  });
+
+  ipcMain.handle('request-microphone-permission', async () => {
+    if (process.platform === 'darwin') {
+      return await systemPreferences.askForMediaAccess('microphone');
+    }
+    return true;
+  });
 
   createWindow();
 
