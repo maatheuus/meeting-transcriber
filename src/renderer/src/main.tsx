@@ -1,3 +1,4 @@
+import '@fontsource-variable/jetbrains-mono';
 import './assets/main.css';
 
 import { StrictMode } from 'react';
