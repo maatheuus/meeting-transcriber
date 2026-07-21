@@ -1,12 +1,13 @@
-import { contextBridge } from 'electron';
 import { electronAPI } from '@electron-toolkit/preload';
+import { contextBridge } from 'electron';
 
-// Custom APIs for renderer
-const api = {};
+import { ipcRenderer } from 'electron';
 
-// Use `contextBridge` APIs to expose Electron APIs to
-// renderer only if context isolation is enabled, otherwise
-// just add to the DOM global.
+const api = {
+  getDesktopSources: (opts: any) => ipcRenderer.invoke('get-desktop-sources', opts),
+  requestMicrophonePermission: () => ipcRenderer.invoke('request-microphone-permission'),
+};
+
 if (process.contextIsolated) {
   try {
     contextBridge.exposeInMainWorld('electron', electronAPI);
