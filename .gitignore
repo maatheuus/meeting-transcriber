@@ -5,3 +5,4 @@ out
 .eslintcache
 *.log*
 .yarn/install-state.gz
+.env
