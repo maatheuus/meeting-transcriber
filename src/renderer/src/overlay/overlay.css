@@ -1,0 +1,122 @@
+:root {
+  --accent: #ff7043;
+  --pill-bg: #26241f;
+  --pill-border: #3a372f;
+  --pill-ink: #fffef2;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body,
+#overlay-root {
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+  user-select: none;
+  font-family: 'Space Mono', ui-monospace, monospace;
+}
+
+.pill-wrap {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pill {
+  /* The whole pill body drags the window; buttons opt out below. */
+  -webkit-app-region: drag;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+  background: var(--pill-bg);
+  border: 1px solid var(--pill-border);
+  border-radius: 9999px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  color: var(--pill-ink);
+}
+
+.grip {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 0 2px;
+  opacity: 0.35;
+}
+
+.grip span {
+  display: block;
+  width: 12px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--pill-ink);
+}
+
+.wave {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 26px;
+}
+
+.wave .bar {
+  width: 3px;
+  min-height: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+  transition:
+    height 90ms linear,
+    opacity 200ms;
+}
+
+.wave.paused .bar {
+  opacity: 0.4;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn {
+  -webkit-app-region: no-drag;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 9999px;
+  cursor: pointer;
+  color: var(--pill-ink);
+  background: rgba(255, 254, 242, 0.1);
+  transition:
+    background 150ms,
+    transform 100ms;
+}
+
+.btn:hover {
+  background: rgba(255, 254, 242, 0.2);
+}
+
+.btn:active {
+  transform: scale(0.92);
+}
+
+.btn.stop {
+  background: var(--accent);
+  color: #fff;
+}
+
+.btn.stop:hover {
+  background: #ff835c;
+}
