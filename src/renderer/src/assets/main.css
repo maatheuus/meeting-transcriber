@@ -1,0 +1,147 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+@font-face {
+  font-family: 'Satoshi';
+  src: url('./fonts/satoshi-400.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Satoshi';
+  src: url('./fonts/satoshi-500.woff2') format('woff2');
+  font-weight: 500;
+  font-display: swap;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Satoshi';
+  src: url('./fonts/satoshi-700.woff2') format('woff2');
+  font-weight: 700;
+  font-display: swap;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Clash Display';
+  src: url('./fonts/clash-display-500.woff2') format('woff2');
+  font-weight: 500;
+  font-display: swap;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Clash Display';
+  src: url('./fonts/clash-display-600.woff2') format('woff2');
+  font-weight: 600;
+  font-display: swap;
+  font-style: normal;
+}
+
+:root {
+  --radius: 0rem;
+  --bg: #fffef2;
+  --ink: #2d2926;
+  --accent: #ff7043;
+  --accent-soft: #fff0eb;
+  --ink-muted: #6b6661;
+  --ink-faint: rgba(45, 41, 38, 0.08);
+
+  --background: var(--bg);
+  --foreground: var(--ink);
+  --card: #ffffff;
+  --card-foreground: var(--ink);
+  --popover: #ffffff;
+  --popover-foreground: var(--ink);
+  --primary: var(--accent);
+  --primary-foreground: #ffffff;
+  --secondary: var(--accent-soft);
+  --secondary-foreground: var(--ink);
+  --muted: var(--ink-faint);
+  --muted-foreground: var(--ink-muted);
+  --border: var(--ink);
+  --input: var(--ink-faint);
+  --ring: var(--ink);
+}
+
+.dark {
+  --bg: #1e1d1a;
+  --ink: #fffef2;
+  --accent: #ff7043;
+  --accent-soft: #2d2623;
+  --ink-muted: #a6a19b;
+  --ink-faint: rgba(255, 254, 242, 0.12);
+
+  --background: var(--bg);
+  --foreground: var(--ink);
+  --card: #2a2925;
+  --card-foreground: var(--ink);
+  --popover: #2a2925;
+  --popover-foreground: var(--ink);
+  --primary: var(--accent);
+  --primary-foreground: #ffffff;
+  --secondary: var(--accent-soft);
+  --secondary-foreground: var(--ink);
+  --muted: var(--ink-faint);
+  --muted-foreground: var(--ink-muted);
+  --border: var(--ink);
+  --input: var(--ink-faint);
+  --ring: var(--ink);
+}
+
+@theme inline {
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-display: 'Gaegu', cursive;
+  --font-mono: 'Space Mono', monospace;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --color-bg: var(--bg);
+  --color-ink: var(--ink);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-faint: var(--ink-faint);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply font-display;
+  }
+}

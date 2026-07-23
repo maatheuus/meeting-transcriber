@@ -1,0 +1,9 @@
+out
+dist
+node_modules
+yarn.lock
+LICENSE.md
+tsconfig.json
+tsconfig.*.json
+
+Meeting Transcriber/

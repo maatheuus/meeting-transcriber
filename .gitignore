@@ -1,0 +1,10 @@
+node_modules
+dist
+out
+.DS_Store
+.eslintcache
+*.log*
+.yarn/install-state.gz
+.env
+# pasted source project (ported into src/)
+Meeting Transcriber/
