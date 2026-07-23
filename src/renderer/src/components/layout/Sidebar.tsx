@@ -9,6 +9,7 @@ import {
   Inbox,
   Moon,
   MoreHorizontal,
+  PanelLeftClose,
   PanelLeftOpen,
   Pencil,
   Plus,
@@ -80,6 +81,21 @@ export function Sidebar({
   }, []);
 
   useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent): void => {
+      if (e.key.toLowerCase() !== 'b' || !(e.metaKey || e.ctrlKey)) return;
+      e.preventDefault();
+      setIsOpen((open) => !open);
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  useEffect(() => {
+    animate(baseWidth, isOpen ? 320 : 0, { type: 'spring', bounce: 0, duration: 0.3 });
+    animate(x, 0, { type: 'spring', bounce: 0, duration: 0.3 });
+  }, [isOpen, baseWidth, x]);
+
+  useEffect(() => {
     const query = searchQuery.trim();
     if (!query) {
       setSearchMatchIds(null);
@@ -103,7 +119,6 @@ export function Sidebar({
     const currentWidth = baseWidth.get() + x.get();
     if (currentWidth < 150 || info.velocity.x < -500) {
       setIsOpen(false);
-      animate(baseWidth, 0, { type: 'spring', bounce: 0, duration: 0.3 });
     } else {
       setIsOpen(true);
       animate(baseWidth, Math.min(Math.max(currentWidth, 240), 480), {
@@ -115,11 +130,8 @@ export function Sidebar({
     animate(x, 0, { type: 'spring', bounce: 0, duration: 0.3 });
   };
 
-  const handleOpen = () => {
-    setIsOpen(true);
-    animate(baseWidth, 320, { type: 'spring', bounce: 0, duration: 0.3 });
-    animate(x, 0, { type: 'spring', bounce: 0, duration: 0.3 });
-  };
+  const handleOpen = (): void => setIsOpen(true);
+  const handleClose = (): void => setIsOpen(false);
 
   const saveEdit = (id: string) => {
     if (editTitle.trim()) onPatchMeeting(id, { title: editTitle.trim() });
@@ -193,6 +205,7 @@ export function Sidebar({
       {!isOpen && (
         <button
           onClick={handleOpen}
+          title="Open sidebar (⌘B)"
           className="bg-card border-ink group absolute top-8 left-8 z-50 flex cursor-pointer items-center justify-center border-[3px] p-3 shadow-[4px_4px_0_var(--ink)] transition-all hover:translate-y-[2px] hover:shadow-[2px_2px_0_var(--ink)] active:translate-y-[4px] active:shadow-none"
         >
           <PanelLeftOpen size={24} className="text-ink group-hover:text-accent transition-colors" />
@@ -207,13 +220,25 @@ export function Sidebar({
           style={{ opacity: contentOpacity, pointerEvents: isOpen ? 'auto' : 'none' }}
           className="flex h-full w-full min-w-[240px] flex-col overflow-hidden p-8"
         >
-          <button
-            onClick={onGoHome}
-            className="font-display text-accent mt-4 mb-8 -rotate-2 px-2 text-left text-[2.5rem] leading-none whitespace-nowrap transition-opacity hover:opacity-80"
-            title="Back to home"
-          >
-            Transcriber*
-          </button>
+          <div className="mt-4 mb-8 flex shrink-0 items-start justify-between gap-2">
+            <button
+              onClick={onGoHome}
+              className="font-display text-accent -rotate-2 px-2 text-left text-[2.5rem] leading-none whitespace-nowrap transition-opacity hover:opacity-80"
+              title="Back to home"
+            >
+              Transcriber*
+            </button>
+            <button
+              onClick={handleClose}
+              className="hover:bg-ink/10 group shrink-0 cursor-pointer p-2 transition-colors"
+              title="Collapse sidebar (⌘B)"
+            >
+              <PanelLeftClose
+                size={20}
+                className="text-ink group-hover:text-accent transition-colors"
+              />
+            </button>
+          </div>
 
           <nav className="mb-6 shrink-0 px-2">
             <span className="text-ink mb-4 block font-mono text-[0.7rem] tracking-[0.1em] uppercase opacity-60">

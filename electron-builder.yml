@@ -1,5 +1,5 @@
-appId: com.electron.app
-productName: tmp-scaffold
+appId: com.transcriber.app
+productName: Transcriber
 directories:
   buildResources: build
 files:
@@ -13,7 +13,7 @@ asarUnpack:
   - resources/**
   - node_modules/better-sqlite3/**
 win:
-  executableName: tmp-scaffold
+  executableName: Transcriber
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}

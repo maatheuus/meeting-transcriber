@@ -43,6 +43,8 @@ function loadDotenv(): void {
 
 loadDotenv();
 
+app.setName('Transcriber');
+
 let mainWindow: BrowserWindow | null = null;
 let overlayWindow: BrowserWindow | null = null;
 
@@ -147,7 +149,9 @@ function showOverlay(): void {
 }
 
 app.whenReady().then(() => {
-  electronApp.setAppUserModelId('com.electron');
+  electronApp.setAppUserModelId('com.transcriber.app');
+
+  if (is.dev) app.dock?.setIcon(icon);
 
   initDb();
   seedIfEmpty();
