@@ -27,6 +27,9 @@ const api = {
     load: (filePath: string) => ipcRenderer.invoke('audio:load', filePath),
     delete: (meetingId: string) => ipcRenderer.invoke('audio:delete', meetingId),
   },
+  screenshot: {
+    region: () => ipcRenderer.invoke('screenshot:region'),
+  },
   overlay: {
     show: () => ipcRenderer.send('overlay:show'),
     hide: () => ipcRenderer.send('overlay:hide'),
@@ -39,8 +42,9 @@ const api = {
       ipcRenderer.on('recording:state', listener);
       return () => ipcRenderer.removeListener('recording:state', listener);
     },
-    sendCommand: (cmd: 'pause' | 'resume' | 'stop') => ipcRenderer.send('overlay:command', cmd),
-    onCommand: (cb: (cmd: 'pause' | 'resume' | 'stop') => void) => {
+    sendCommand: (cmd: 'pause' | 'resume' | 'stop' | 'capture') =>
+      ipcRenderer.send('overlay:command', cmd),
+    onCommand: (cb: (cmd: 'pause' | 'resume' | 'stop' | 'capture') => void) => {
       const listener = (_e: unknown, cmd: any) => cb(cmd);
       ipcRenderer.on('recording:command', listener);
       return () => ipcRenderer.removeListener('recording:command', listener);

@@ -1,17 +1,19 @@
 import { electronApp, is, optimizer } from '@electron-toolkit/utils';
+import { execFile } from 'child_process';
 import {
   app,
   BrowserWindow,
   desktopCapturer,
   ipcMain,
   screen,
+  session,
   shell,
   systemPreferences,
 } from 'electron';
-import { mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from 'fs';
+import { mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import icon from '../../resources/icon.png?asset';
-import { listModels, transcribe, chatFast, chatThink } from './gemini';
+import { chatFast, chatThink, listModels, transcribe } from './gemini';
 
 // electron-vite does not inject .env into the runtime process, so load it here
 // for local dev. In a packaged build there is no .env and the API key entered
@@ -121,7 +123,7 @@ function createWindow(): void {
 // pill (waveform + pause/resume/stop) floating outside the main window.
 function createOverlayWindow(): void {
   overlayWindow = new BrowserWindow({
-    width: 240,
+    width: 280,
     height: 80,
     show: false,
     frame: false,
@@ -187,6 +189,16 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window);
   });
 
+  session.defaultSession.setDisplayMediaRequestHandler(
+    (_request, callback) => {
+      desktopCapturer
+        .getSources({ types: ['screen', 'window'] })
+        .then((sources) => callback(sources[0] ? { video: sources[0] } : {}))
+        .catch(() => callback({}));
+    },
+    { useSystemPicker: true },
+  );
+
   ipcMain.on('ping', () => console.log('pong'));
 
   ipcMain.handle('get-desktop-sources', async (_, opts) => {
@@ -236,6 +248,23 @@ app.whenReady().then(() => {
     } catch {
       // Nothing to delete, or the folder does not exist yet.
     }
+  });
+
+  ipcMain.handle('screenshot:region', async () => {
+    if (process.platform !== 'darwin') return { supported: false as const };
+    const tmp = join(app.getPath('temp'), `mt-shot-${Date.now()}.png`);
+    return await new Promise<{ supported: true; dataUrl: string | null }>((resolve) => {
+      execFile('screencapture', ['-i', '-x', '-t', 'png', tmp], () => {
+        try {
+          const buf = readFileSync(tmp);
+          unlinkSync(tmp);
+          resolve({ supported: true, dataUrl: `data:image/png;base64,${buf.toString('base64')}` });
+        } catch {
+          // No file written — the selection was cancelled.
+          resolve({ supported: true, dataUrl: null });
+        }
+      });
+    });
   });
 
   ipcMain.on('overlay:show', () => showOverlay());
