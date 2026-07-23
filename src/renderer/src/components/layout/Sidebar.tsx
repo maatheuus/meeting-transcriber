@@ -1,46 +1,51 @@
-import { useState, useRef, useEffect } from 'react';
 import { useTheme } from '@renderer/components/theme-provider';
+import { formatMeetingDate } from '@renderer/lib/utils';
+import type { Meeting, MeetingPatch } from '@renderer/types';
+import { animate, motion, useMotionValue, useTransform } from 'framer-motion';
 import {
+  Folder,
+  FolderOpen,
+  Home,
+  Inbox,
   Moon,
-  Sun,
+  MoreHorizontal,
   PanelLeftOpen,
   Pencil,
+  Plus,
   Search,
   Settings,
-  FolderOpen,
-  Plus,
+  Sun,
   Trash2,
-  MoreHorizontal,
-  Inbox,
-  Folder,
-  Home,
 } from 'lucide-react';
-import { motion, useMotionValue, useTransform, animate } from 'framer-motion';
+import { useEffect, useRef, useState } from 'react';
 import { SettingsModal } from './SettingsModal';
-import type { Meeting } from '@renderer/types';
 
 type SidebarProps = {
   meetings: Meeting[];
-  setMeetings: React.Dispatch<React.SetStateAction<Meeting[]>>;
   folders: string[];
-  setFolders: React.Dispatch<React.SetStateAction<string[]>>;
   selectedMeetingId: string | null;
   onSelectMeeting: (id: string) => void;
   onGoHome: () => void;
   onAddMeeting: (folder?: string) => void;
   onDeleteMeeting: (id: string) => void;
+  onPatchMeeting: (id: string, patch: MeetingPatch) => void;
+  onCreateFolder: (name: string) => void;
+  onRenameFolder: (oldName: string, newName: string) => void;
+  onDeleteFolder: (name: string) => void;
 };
 
 export function Sidebar({
   meetings,
-  setMeetings,
   folders,
-  setFolders,
   selectedMeetingId,
   onSelectMeeting,
   onGoHome,
   onAddMeeting,
   onDeleteMeeting,
+  onPatchMeeting,
+  onCreateFolder,
+  onRenameFolder,
+  onDeleteFolder,
 }: SidebarProps) {
   const { theme, setTheme } = useTheme();
   const [isOpen, setIsOpen] = useState(true);
@@ -54,6 +59,8 @@ export function Sidebar({
   const [editingFolder, setEditingFolder] = useState<string | null>(null);
   const [editFolderName, setEditFolderName] = useState('');
   const [contextMenuMeetingId, setContextMenuMeetingId] = useState<string | null>(null);
+  // Ids returned by full-text search; null while the search box is empty.
+  const [searchMatchIds, setSearchMatchIds] = useState<string[] | null>(null);
 
   const newFolderInputRef = useRef<HTMLInputElement>(null);
 
@@ -71,6 +78,26 @@ export function Sidebar({
     document.addEventListener('click', handleClickOutside);
     return () => document.removeEventListener('click', handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    const query = searchQuery.trim();
+    if (!query) {
+      setSearchMatchIds(null);
+      return;
+    }
+
+    let cancelled = false;
+    window.api.search
+      .all(query)
+      .then((result) => {
+        if (!cancelled) setSearchMatchIds(result.meetingIds);
+      })
+      .catch((e) => console.error('Search failed', e));
+
+    return () => {
+      cancelled = true;
+    };
+  }, [searchQuery, meetings.length]);
 
   const handleDragEnd = (_e: unknown, info: { velocity: { x: number } }) => {
     const currentWidth = baseWidth.get() + x.get();
@@ -95,16 +122,14 @@ export function Sidebar({
   };
 
   const saveEdit = (id: string) => {
-    if (editTitle.trim()) {
-      setMeetings((prev) => prev.map((m) => (m.id === id ? { ...m, title: editTitle.trim() } : m)));
-    }
+    if (editTitle.trim()) onPatchMeeting(id, { title: editTitle.trim() });
     setEditingId(null);
   };
 
   const handleCreateFolder = () => {
     const name = newFolderName.trim();
     if (name && name !== 'Uncategorized' && !folders.includes(name)) {
-      setFolders((prev) => [...prev, name]);
+      onCreateFolder(name);
       setSelectedFolder(name);
     }
     setIsCreatingFolder(false);
@@ -118,25 +143,21 @@ export function Sidebar({
 
     if (!name || name === oldName || name === 'Uncategorized' || folders.includes(name)) return;
 
-    setFolders((prev) => prev.map((f) => (f === oldName ? name : f)));
-    setMeetings((prev) => prev.map((m) => (m.folder === oldName ? { ...m, folder: name } : m)));
+    onRenameFolder(oldName, name);
     setSelectedFolder((current) => (current === oldName ? name : current));
   };
 
   const handleDeleteFolder = (e: React.MouseEvent, folder: string) => {
     e.stopPropagation();
-    setFolders((prev) => prev.filter((f) => f !== folder));
+    onDeleteFolder(folder);
     if (selectedFolder === folder) setSelectedFolder(null);
-    setMeetings((prev) => prev.map((m) => (m.folder === folder ? { ...m, folder: undefined } : m)));
   };
 
   const handleDrop = (e: React.DragEvent, targetFolder: string | null) => {
     e.preventDefault();
     const meetingId = e.dataTransfer.getData('text/plain');
     if (!meetingId) return;
-    setMeetings((prev) =>
-      prev.map((m) => (m.id === meetingId ? { ...m, folder: targetFolder || undefined } : m)),
-    );
+    onPatchMeeting(meetingId, { folder: targetFolder || undefined });
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -146,16 +167,14 @@ export function Sidebar({
 
   const handleMoveToFolder = (e: React.MouseEvent, meetingId: string, folder: string | null) => {
     e.stopPropagation();
-    setMeetings((prev) =>
-      prev.map((m) => (m.id === meetingId ? { ...m, folder: folder || undefined } : m)),
-    );
+    onPatchMeeting(meetingId, { folder: folder || undefined });
     setContextMenuMeetingId(null);
   };
 
   const namedFolders = folders.filter((f) => f !== 'Uncategorized');
 
   const filteredMeetings = meetings.filter((m) => {
-    const matchesSearch = m.title.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = searchMatchIds === null || searchMatchIds.includes(m.id);
     if (selectedFolder === 'Uncategorized') return matchesSearch && !m.folder;
     return matchesSearch && (selectedFolder === null || m.folder === selectedFolder);
   });
@@ -505,11 +524,9 @@ export function Sidebar({
                     </div>
 
                     <div className="flex items-center justify-between gap-2">
-                      {m.date && (
-                        <span className="text-ink-muted block truncate font-mono text-[0.65rem]">
-                          {m.date}
-                        </span>
-                      )}
+                      <span className="text-ink-muted block truncate font-mono text-[0.65rem]">
+                        {formatMeetingDate(m.createdAt)}
+                      </span>
                       {m.tags && m.tags.length > 0 && (
                         <div className="mt-1 flex shrink-0 items-center gap-1">
                           {m.tags.map((tag) => (
