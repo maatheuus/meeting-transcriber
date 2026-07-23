@@ -12,6 +12,7 @@ import {
 } from 'electron';
 import { readFileSync, unlinkSync } from 'fs';
 import { join } from 'path';
+import { autoUpdater } from 'electron-updater';
 import icon from '../../resources/icon.png?asset';
 import { closeDb, initDb } from './db/connection';
 import { registerIpc } from './ipc';
@@ -166,6 +167,8 @@ function showOverlay(): void {
 
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.transcriber.app');
+
+  autoUpdater.checkForUpdatesAndNotify();
 
   if (is.dev) app.dock?.setIcon(icon);
 

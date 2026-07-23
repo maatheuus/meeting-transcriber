@@ -20,6 +20,11 @@ nsis:
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
 mac:
+  target:
+    - target: default
+      arch:
+        - x64
+        - arm64
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
     - NSCameraUsageDescription: Application requests access to the device's camera.
@@ -38,7 +43,8 @@ linux:
   category: Utility
 appImage:
   artifactName: ${name}-${version}.${ext}
-npmRebuild: false
+npmRebuild: true
 publish:
-  provider: generic
-  url: https://example.com/auto-updates
+  provider: github
+  owner: maatheuus
+  repo: meeting-transcriber
