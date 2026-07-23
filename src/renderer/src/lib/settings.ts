@@ -5,8 +5,6 @@ export type AppSettings = {
   summaryModel: string;
 };
 
-const STORAGE_KEY = 'app_settings';
-
 const DEFAULTS: AppSettings = {
   provider: 'gemini',
   apiKey: '',
@@ -15,15 +13,44 @@ const DEFAULTS: AppSettings = {
   summaryModel: '',
 };
 
-export function loadSettings(): AppSettings {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? { ...DEFAULTS, ...JSON.parse(raw) } : { ...DEFAULTS };
-  } catch {
-    return { ...DEFAULTS };
-  }
+/**
+ * Settings live in the `settings` table in the main process. They are read once
+ * during bootstrap into this cache so the rest of the app can keep reading them
+ * synchronously; writes go straight through to the database.
+ */
+let cache: Record<string, string> = {};
+
+export async function hydrateSettings(): Promise<void> {
+  cache = await window.api.settings.getAll();
 }
 
-export function saveSettings(settings: AppSettings) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+export function loadSettings(): AppSettings {
+  return {
+    provider: cache.provider || DEFAULTS.provider,
+    apiKey: cache.apiKey ?? DEFAULTS.apiKey,
+    transcribeModel: cache.transcribeModel ?? DEFAULTS.transcribeModel,
+    summaryModel: cache.summaryModel ?? DEFAULTS.summaryModel,
+  };
+}
+
+export function saveSettings(settings: AppSettings): void {
+  const entries: Record<string, string> = {
+    provider: settings.provider,
+    apiKey: settings.apiKey,
+    transcribeModel: settings.transcribeModel,
+    summaryModel: settings.summaryModel,
+  };
+  cache = { ...cache, ...entries };
+  window.api.settings.setMany(entries).catch((e) => console.error('Failed to save settings', e));
+}
+
+export function getSetting(key: string): string | undefined {
+  return cache[key] || undefined;
+}
+
+export function setSetting(key: string, value: string): void {
+  cache = { ...cache, [key]: value };
+  window.api.settings
+    .setMany({ [key]: value })
+    .catch((e) => console.error(`Failed to save setting "${key}"`, e));
 }

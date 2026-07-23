@@ -1,11 +1,11 @@
-import type { Meeting } from '@renderer/types';
+import type { Meeting, MeetingPatch } from '@renderer/types';
 
 export function NotesTab({
   meeting,
   onPatchMeeting,
 }: {
   meeting: Meeting;
-  onPatchMeeting: (patch: Partial<Meeting>) => void;
+  onPatchMeeting: (patch: MeetingPatch) => void;
 }) {
   return (
     <div className="animate-in fade-in slide-in-from-bottom-2 bg-card border-ink h-full border-[3px] p-8 duration-500">

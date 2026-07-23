@@ -9,14 +9,17 @@ import {
   type InstructionTemplate,
 } from '@renderer/lib/instructions';
 import { loadSettings } from '@renderer/lib/settings';
-import type { Meeting } from '@renderer/types';
+import { msToTime } from '@renderer/lib/utils';
+import type { Meeting, MeetingPatch, TranscriptSegment } from '@renderer/types';
 
 export function SummaryTab({
   meeting,
+  segments,
   onPatchMeeting,
 }: {
   meeting: Meeting;
-  onPatchMeeting: (patch: Partial<Meeting>) => void;
+  segments: TranscriptSegment[];
+  onPatchMeeting: (patch: MeetingPatch) => void;
 }) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [templates, setTemplates] = useState<InstructionTemplate[]>(loadTemplates);
@@ -29,8 +32,8 @@ export function SummaryTab({
     meeting.instruction || templates.find((t) => t.isDefault)?.id || templates[0]?.id || 'auto';
   const selectedTemplate = templates.find((t) => t.id === selectedId) || templates[0];
 
-  const transcriptText = (meeting.transcript || [])
-    .map((s) => `[${s.time}] ${s.speaker}: ${s.text}`)
+  const transcriptText = segments
+    .map((s) => `[${msToTime(s.startMs)}] ${s.speaker}: ${s.text}`)
     .join('\n');
 
   const generateSummary = async () => {
@@ -98,7 +101,7 @@ export function SummaryTab({
               {isGenerating ? 'GENERATING...' : 'GENERATE SUMMARY'}
             </button>
             <span className="font-mono text-[0.65rem] tracking-[0.1em] uppercase opacity-50">
-              {meeting.transcript?.length || 0} transcript lines
+              {segments.length} transcript lines
             </span>
           </div>
         </div>

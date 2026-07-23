@@ -9,32 +9,30 @@ export type InstructionTemplate = {
   name: string;
   icon: string;
   isDefault?: boolean;
+  isBuiltin?: boolean;
   context?: string;
   format?: InstructionSection[];
 };
 
-const STORAGE_KEY = 'summary_instructions';
+/**
+ * Templates live in the `templates` table. The menu edits the whole list at
+ * once, so the cache below mirrors the table and every save rewrites it.
+ */
+let cache: InstructionTemplate[] = [];
 
-export const DEFAULT_TEMPLATES: InstructionTemplate[] = [
-  { id: 'auto', name: 'Auto', icon: 'sparkles', isDefault: true },
-  { id: 'candidate', name: 'Candidate Interview', icon: 'briefcase' },
-  { id: 'customer', name: 'Customer Call', icon: 'phone' },
-  { id: 'standup', name: 'Stand-Up', icon: 'users' },
-  { id: 'person', name: 'Meeting with a person', icon: 'file' },
-];
-
-export function loadTemplates(): InstructionTemplate[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    const parsed = raw ? (JSON.parse(raw) as InstructionTemplate[]) : null;
-    return parsed?.length ? parsed : DEFAULT_TEMPLATES;
-  } catch {
-    return DEFAULT_TEMPLATES;
-  }
+export async function hydrateTemplates(): Promise<void> {
+  cache = await window.api.templates.list();
 }
 
-export function saveTemplates(templates: InstructionTemplate[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(templates));
+export function loadTemplates(): InstructionTemplate[] {
+  return cache;
+}
+
+export function saveTemplates(templates: InstructionTemplate[]): void {
+  cache = templates;
+  window.api.templates
+    .replaceAll(templates)
+    .catch((e) => console.error('Failed to save summary templates', e));
 }
 
 /** Turns a template into the instruction block appended to the summary prompt. */
