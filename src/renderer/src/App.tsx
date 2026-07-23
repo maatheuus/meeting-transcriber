@@ -66,6 +66,8 @@ function App(): React.JSX.Element {
   const deleteMeeting = (id: string) => {
     setMeetings((prev) => prev.filter((m) => m.id !== id));
     setSelectedMeetingId((current) => (current === id ? null : current));
+    // Remove the persisted audio file from disk too.
+    window.api.audio.delete(id).catch((e) => console.error('Failed to delete recording', e));
   };
 
   const selectedMeeting = meetings.find((m) => m.id === selectedMeetingId);

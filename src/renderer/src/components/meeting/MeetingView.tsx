@@ -44,29 +44,57 @@ function formatDuration(seconds: number) {
   return `${m}:${s}`;
 }
 
-/** The model is asked for a JSON array of turns; fall back to one plain segment. */
-function parseTranscript(raw: string): TranscriptSegment[] {
+/** "MM:SS" (or "HH:MM:SS") -> seconds. */
+function timeToSeconds(time: string): number {
+  const parts = time.split(':').map(Number);
+  if (parts.some(Number.isNaN)) return 0;
+  return parts.reduce((total, part) => total * 60 + part, 0);
+}
+
+/**
+ * The model is asked for a JSON array of turns; fall back to one plain segment.
+ * `offsetSeconds` is the recorded time already accumulated before this chunk, so
+ * every turn is shifted onto the meeting's continuous timeline (absolute offset).
+ */
+function parseTranscript(raw: string, offsetSeconds = 0): TranscriptSegment[] {
   const cleaned = raw
     .trim()
     .replace(/^```(?:json)?/i, '')
     .replace(/```$/, '')
     .trim();
 
+  const shift = (rawTime: string): { time: string; offsetMs: number } => {
+    const abs = offsetSeconds + timeToSeconds(rawTime);
+    return { time: formatDuration(abs), offsetMs: Math.round(abs * 1000) };
+  };
+
   try {
     const parsed = JSON.parse(cleaned);
     if (Array.isArray(parsed)) {
-      return parsed.map((item, i) => ({
-        id: `${Date.now()}_${i}`,
-        speaker: typeof item.speaker === 'string' ? item.speaker : 'Speaker 1',
-        time: typeof item.time === 'string' ? item.time : '00:00',
-        text: typeof item.text === 'string' ? item.text : String(item),
-      }));
+      return parsed.map((item, i) => {
+        const { time, offsetMs } = shift(typeof item.time === 'string' ? item.time : '00:00');
+        return {
+          id: `${Date.now()}_${i}`,
+          speaker: typeof item.speaker === 'string' ? item.speaker : 'Speaker 1',
+          time,
+          offsetMs,
+          text: typeof item.text === 'string' ? item.text : String(item),
+        };
+      });
     }
   } catch {
     // Not JSON — keep the raw text as a single segment.
   }
 
-  return [{ id: `${Date.now()}_0`, speaker: 'Speaker 1', time: '00:00', text: cleaned }];
+  return [
+    {
+      id: `${Date.now()}_0`,
+      speaker: 'Speaker 1',
+      time: formatDuration(offsetSeconds),
+      offsetMs: Math.round(offsetSeconds * 1000),
+      text: cleaned,
+    },
+  ];
 }
 
 export function MeetingView({
@@ -109,6 +137,10 @@ export function MeetingView({
   // that must not be rebuilt (keyboard handlers, timers, async completions).
   const meetingRef = useRef(meeting);
   meetingRef.current = meeting;
+
+  // Recorded time already banked before the current session starts. Every turn
+  // this session produces is shifted by this so the timeline stays continuous.
+  const sessionOffsetRef = useRef(0);
 
   const patchMeeting = useCallback(
     (patch: Partial<Meeting>) => onUpdateMeeting({ ...meetingRef.current, ...patch }),
@@ -171,7 +203,7 @@ export function MeetingView({
     toast.success('Copied as Plain Text');
   };
 
-  const transcribe = (audioBlob: Blob) => {
+  const transcribe = (audioBlob: Blob, offsetSeconds: number) => {
     const settings = loadSettings();
     const reader = new FileReader();
 
@@ -192,7 +224,10 @@ export function MeetingView({
         });
 
         patchMeeting({
-          transcript: [...(meetingRef.current.transcript || []), ...parseTranscript(text || '')],
+          transcript: [
+            ...(meetingRef.current.transcript || []),
+            ...parseTranscript(text || '', offsetSeconds),
+          ],
           status: 'complete',
         });
         setLastSaved(new Date());
@@ -208,6 +243,8 @@ export function MeetingView({
 
   const handleStart = async () => {
     try {
+      // Any turns from this session are shifted past the time already recorded.
+      sessionOffsetRef.current = durationSeconds;
       await audioService.startRecording();
       setRecordState('recording');
       patchMeeting({ status: 'recording' });
@@ -235,12 +272,35 @@ export function MeetingView({
       setRecordState('idle');
       window.api.overlay.hide();
 
-      setAudioUrl(setRecording(meetingRef.current.id, audioBlob));
-      patchMeeting({ status: 'transcribing', durationSeconds });
+      const offsetSeconds = sessionOffsetRef.current;
+      // Accurate accumulated recorded length from the monotonic clock.
+      const totalSeconds = Math.round(offsetSeconds + audioService.getElapsedMs() / 1000);
+      setDurationSeconds(totalSeconds);
+
+      const meetingId = meetingRef.current.id;
+      setAudioUrl(setRecording(meetingId, audioBlob));
+
+      // Flush the final recording to disk so it survives a reload.
+      let audioPath: string | undefined;
+      try {
+        audioPath = await window.api.audio.save({
+          meetingId,
+          mimeType: audioBlob.type,
+          data: await audioBlob.arrayBuffer(),
+        });
+      } catch (e) {
+        console.error('Failed to persist recording to disk', e);
+      }
+
+      patchMeeting({
+        status: 'transcribing',
+        durationSeconds: totalSeconds,
+        ...(audioPath ? { audioPath } : {}),
+      });
       setLastSaved(new Date());
       toast.success('Recording saved. Transcribing…');
 
-      transcribe(audioBlob);
+      transcribe(audioBlob, offsetSeconds);
     } catch {
       toast.error('Failed to stop recording');
     }
@@ -333,6 +393,24 @@ export function MeetingView({
   useEffect(() => {
     if (audioRef.current) audioRef.current.volume = volume;
   }, [volume, audioUrl]);
+
+  // After a reload the in-memory blob is gone, so pull the persisted file from
+  // disk and rebuild a blob URL the existing player can use unchanged.
+  useEffect(() => {
+    if (audioUrl || !meeting.audioPath) return;
+    let cancelled = false;
+    window.api.audio
+      .load(meeting.audioPath)
+      .then((res) => {
+        if (cancelled || !res) return;
+        const blob = new Blob([res.data as BlobPart], { type: res.mimeType });
+        setAudioUrl(setRecording(meeting.id, blob));
+      })
+      .catch((e) => console.error('Failed to load recording from disk', e));
+    return () => {
+      cancelled = true;
+    };
+  }, [meeting.id, meeting.audioPath, audioUrl]);
 
   const hasRecording = Boolean(audioUrl);
   const progress = audioDuration ? (currentTime / audioDuration) * 100 : 0;
@@ -706,7 +784,7 @@ export function MeetingView({
           <div className="text-ink mt-2 flex justify-between font-mono text-[0.7rem] tracking-[0.1em] uppercase opacity-60">
             <span>{formatDuration(currentTime)} elapsed</span>
             <span>
-              {hasRecording ? `${formatDuration(audioDuration)} total` : 'no recording in memory'}
+              {hasRecording ? `${formatDuration(audioDuration)} total` : 'no recording saved'}
             </span>
           </div>
         </div>

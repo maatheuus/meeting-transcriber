@@ -21,6 +21,12 @@ const api = {
     chatThink: (args: { prompt: string; model?: string; apiKey?: string }) =>
       ipcRenderer.invoke('gemini:chat-think', args),
   },
+  audio: {
+    save: (args: { meetingId: string; mimeType?: string; data: ArrayBuffer }) =>
+      ipcRenderer.invoke('audio:save', args),
+    load: (filePath: string) => ipcRenderer.invoke('audio:load', filePath),
+    delete: (meetingId: string) => ipcRenderer.invoke('audio:delete', meetingId),
+  },
   overlay: {
     show: () => ipcRenderer.send('overlay:show'),
     hide: () => ipcRenderer.send('overlay:hide'),

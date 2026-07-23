@@ -26,6 +26,13 @@ export class AudioRecordingService {
   private mediaRecorder: MediaRecorder | null = null;
   private audioChunks: Blob[] = [];
 
+  // Monotonic recording clock: total RECORDED time for the current session,
+  // excluding any paused intervals. `runStart` is the timestamp of the current
+  // running span (0 while paused/stopped); `bankedMs` accumulates time from the
+  // spans already finished (each pause banks the elapsed span).
+  private runStart = 0;
+  private bankedMs = 0;
+
   // Web Audio graph used only to read the live input level for the waveform.
   private audioContext: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
@@ -45,6 +52,8 @@ export class AudioRecordingService {
 
   async startRecording(deviceId?: string): Promise<void> {
     this.audioChunks = [];
+    this.bankedMs = 0;
+    this.runStart = 0;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: deviceId ? { deviceId: { exact: deviceId } } : true,
@@ -60,10 +69,21 @@ export class AudioRecordingService {
 
       this.setupAnalyser(stream);
       this.mediaRecorder.start();
+      this.runStart = performance.now();
     } catch (e) {
       console.error('Failed to start recording', e);
       throw e;
     }
+  }
+
+  /** Total recorded time (ms) of the current session, excluding paused spans. */
+  getElapsedMs(): number {
+    return this.bankedMs + (this.runStart ? performance.now() - this.runStart : 0);
+  }
+
+  /** MediaRecorder's actual output mime type (e.g. "audio/webm;codecs=opus"). */
+  getMimeType(): string {
+    return this.mediaRecorder?.mimeType || 'audio/webm';
   }
 
   private setupAnalyser(stream: MediaStream): void {
@@ -104,12 +124,18 @@ export class AudioRecordingService {
   pauseRecording() {
     if (this.mediaRecorder && this.mediaRecorder.state === 'recording') {
       this.mediaRecorder.pause();
+      // Bank the running span and stop the clock so paused time is excluded.
+      if (this.runStart) {
+        this.bankedMs += performance.now() - this.runStart;
+        this.runStart = 0;
+      }
     }
   }
 
   resumeRecording() {
     if (this.mediaRecorder && this.mediaRecorder.state === 'paused') {
       this.mediaRecorder.resume();
+      this.runStart = performance.now();
     }
   }
 
@@ -120,8 +146,15 @@ export class AudioRecordingService {
         return;
       }
 
+      const mimeType = this.mediaRecorder.mimeType || 'audio/webm;codecs=opus';
+
       this.mediaRecorder.onstop = () => {
-        const blob = new Blob(this.audioChunks, { type: 'audio/webm;codecs=opus' });
+        // Freeze the recording clock so getElapsedMs() reflects the final length.
+        if (this.runStart) {
+          this.bankedMs += performance.now() - this.runStart;
+          this.runStart = 0;
+        }
+        const blob = new Blob(this.audioChunks, { type: mimeType });
         this.audioChunks = [];
         this.teardownAnalyser();
         resolve(blob);
