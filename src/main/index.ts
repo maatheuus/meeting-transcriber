@@ -85,6 +85,12 @@ function createWindow(): void {
   }
 }
 
+function applyOverlayWindowFlags(win: BrowserWindow): void {
+  win.setContentProtection(true);
+  win.setAlwaysOnTop(true, 'screen-saver', 1);
+  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+}
+
 // Small frameless, transparent, always-on-top window that shows the recording
 // pill (waveform + pause/resume/stop) floating outside the main window.
 function createOverlayWindow(): void {
@@ -103,15 +109,19 @@ function createOverlayWindow(): void {
     skipTaskbar: true,
     hasShadow: false,
     alwaysOnTop: true,
+    ...(process.platform === 'darwin'
+      ? { type: 'panel' as const, hiddenInMissionControl: true }
+      : {}),
+    ...(process.platform === 'win32' ? { thickFrame: false } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
     },
   });
 
-  // Sit above full-screen apps too, like a system HUD.
-  overlayWindow.setAlwaysOnTop(true, 'screen-saver');
-  overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  applyOverlayWindowFlags(overlayWindow);
+  overlayWindow.on('show', () => applyOverlayWindowFlags(overlayWindow!));
+  overlayWindow.on('focus', () => applyOverlayWindowFlags(overlayWindow!));
 
   overlayWindow.on('closed', () => {
     overlayWindow = null;
@@ -122,6 +132,12 @@ function createOverlayWindow(): void {
   } else {
     overlayWindow.loadFile(join(__dirname, '../renderer/overlay.html'));
   }
+}
+
+function withoutOverlay<T extends { id: string }>(sources: T[]): T[] {
+  if (!overlayWindow || overlayWindow.isDestroyed()) return sources;
+  const overlayId = overlayWindow.getMediaSourceId();
+  return sources.filter((source) => source.id !== overlayId);
 }
 
 function positionOverlay(): void {
@@ -166,7 +182,10 @@ app.whenReady().then(() => {
     (_request, callback) => {
       desktopCapturer
         .getSources({ types: ['screen', 'window'] })
-        .then((sources) => callback(sources[0] ? { video: sources[0] } : {}))
+        .then((sources) => {
+          const [first] = withoutOverlay(sources);
+          callback(first ? { video: first } : {});
+        })
         .catch(() => callback({}));
     },
     { useSystemPicker: true },
@@ -175,7 +194,7 @@ app.whenReady().then(() => {
   ipcMain.on('ping', () => console.log('pong'));
 
   ipcMain.handle('get-desktop-sources', async (_, opts) => {
-    return await desktopCapturer.getSources(opts);
+    return withoutOverlay(await desktopCapturer.getSources(opts));
   });
 
   ipcMain.handle('request-microphone-permission', async () => {
