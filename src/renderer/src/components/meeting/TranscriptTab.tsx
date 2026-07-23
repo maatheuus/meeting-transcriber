@@ -74,10 +74,12 @@ export function TranscriptTab({
 
   const addSegment = () => {
     const last = segments[segments.length - 1];
+    const seconds = last ? timeToSeconds(last.time) + 5 : 0;
     const newSegment: TranscriptSegment = {
       id: `${Date.now()}`,
       speaker: last?.speaker || 'Speaker 1',
-      time: last ? secondsToTime(timeToSeconds(last.time) + 5) : '00:00',
+      time: secondsToTime(seconds),
+      offsetMs: seconds * 1000,
       text: '',
     };
     updateSegments([...segments, newSegment]);
@@ -123,8 +125,19 @@ export function TranscriptTab({
             <div className="w-16 shrink-0 pt-0.5">
               <input
                 value={segment.time}
-                onChange={(e) => patchSegment(segment.id, { time: e.target.value })}
-                onClick={() => onSeek?.(timeToSeconds(segment.time))}
+                onChange={(e) =>
+                  patchSegment(segment.id, {
+                    time: e.target.value,
+                    offsetMs: timeToSeconds(e.target.value) * 1000,
+                  })
+                }
+                onClick={() =>
+                  onSeek?.(
+                    segment.offsetMs != null
+                      ? segment.offsetMs / 1000
+                      : timeToSeconds(segment.time),
+                  )
+                }
                 className="text-accent focus:border-accent w-full bg-transparent font-mono text-[0.8rem] underline outline-none focus:border-b-2 focus:no-underline"
                 title={
                   onSeek

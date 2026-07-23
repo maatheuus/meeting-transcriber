@@ -21,6 +21,15 @@ declare global {
         chatFast: (args: { prompt: string; model?: string; apiKey?: string }) => Promise<string>;
         chatThink: (args: { prompt: string; model?: string; apiKey?: string }) => Promise<string>;
       };
+      audio: {
+        save: (args: {
+          meetingId: string;
+          mimeType?: string;
+          data: ArrayBuffer;
+        }) => Promise<string>;
+        load: (filePath: string) => Promise<{ data: Uint8Array; mimeType: string } | null>;
+        delete: (meetingId: string) => Promise<void>;
+      };
       overlay: {
         show: () => void;
         hide: () => void;

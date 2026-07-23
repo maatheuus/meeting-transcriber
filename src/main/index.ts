@@ -8,7 +8,7 @@ import {
   shell,
   systemPreferences,
 } from 'electron';
-import { readFileSync } from 'fs';
+import { mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import icon from '../../resources/icon.png?asset';
 import { listModels, transcribe, chatFast, chatThink } from './gemini';
@@ -40,6 +40,42 @@ function loadDotenv(): void {
 }
 
 loadDotenv();
+
+// --- Persisted recordings ------------------------------------------------
+// Audio blobs are too large for localStorage, so the final recording of each
+// meeting is written to userData/recordings/<meetingId>.<ext> and reloaded from
+// there on demand. Meeting metadata still lives in localStorage.
+function recordingsDir(): string {
+  return join(app.getPath('userData'), 'recordings');
+}
+
+function safeId(id: string): string {
+  return String(id).replace(/[^a-zA-Z0-9_-]/g, '');
+}
+
+function extForMime(mime?: string): string {
+  const m = (mime || '').toLowerCase();
+  if (m.includes('ogg')) return 'ogg';
+  if (m.includes('mp4')) return 'mp4';
+  if (m.includes('mpeg')) return 'mp3';
+  if (m.includes('wav')) return 'wav';
+  return 'webm';
+}
+
+function mimeForExt(ext: string): string {
+  switch (ext) {
+    case 'ogg':
+      return 'audio/ogg';
+    case 'mp4':
+      return 'audio/mp4';
+    case 'mp3':
+      return 'audio/mpeg';
+    case 'wav':
+      return 'audio/wav';
+    default:
+      return 'audio/webm';
+  }
+}
 
 let mainWindow: BrowserWindow | null = null;
 let overlayWindow: BrowserWindow | null = null;
@@ -169,9 +205,44 @@ app.whenReady().then(() => {
   ipcMain.handle('gemini:chat-fast', (_e, args) => chatFast(args));
   ipcMain.handle('gemini:chat-think', (_e, args) => chatThink(args));
 
+  ipcMain.handle(
+    'audio:save',
+    (_e, args: { meetingId: string; mimeType?: string; data: ArrayBuffer | Uint8Array }) => {
+      const dir = recordingsDir();
+      mkdirSync(dir, { recursive: true });
+      const filePath = join(dir, `${safeId(args.meetingId)}.${extForMime(args.mimeType)}`);
+      writeFileSync(filePath, Buffer.from(args.data as ArrayBuffer));
+      return filePath;
+    },
+  );
+
+  ipcMain.handle('audio:load', (_e, filePath: string) => {
+    try {
+      const data = readFileSync(filePath);
+      const ext = (filePath.split('.').pop() || 'webm').toLowerCase();
+      return { data, mimeType: mimeForExt(ext) };
+    } catch {
+      return null;
+    }
+  });
+
+  ipcMain.handle('audio:delete', (_e, meetingId: string) => {
+    try {
+      const dir = recordingsDir();
+      const prefix = `${safeId(meetingId)}.`;
+      for (const file of readdirSync(dir)) {
+        if (file.startsWith(prefix)) unlinkSync(join(dir, file));
+      }
+    } catch {
+      // Nothing to delete, or the folder does not exist yet.
+    }
+  });
+
   ipcMain.on('overlay:show', () => showOverlay());
   ipcMain.on('overlay:hide', () => overlayWindow?.hide());
-  ipcMain.on('overlay:command', (_e, cmd) => mainWindow?.webContents.send('recording:command', cmd));
+  ipcMain.on('overlay:command', (_e, cmd) =>
+    mainWindow?.webContents.send('recording:command', cmd),
+  );
   ipcMain.on('recording:update', (_e, payload) =>
     overlayWindow?.webContents.send('recording:state', payload),
   );
