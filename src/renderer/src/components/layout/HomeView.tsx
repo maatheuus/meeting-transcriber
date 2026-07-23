@@ -1,5 +1,6 @@
-import { Mic, Plus } from 'lucide-react';
+import { formatMeetingDate } from '@renderer/lib/utils';
 import type { Meeting } from '@renderer/types';
+import { Mic, Plus } from 'lucide-react';
 
 const STATUS_LABEL: Record<string, string> = {
   idle: 'Not started',
@@ -18,7 +19,7 @@ export function HomeView({
   onAddMeeting: () => void;
 }): React.JSX.Element {
   return (
-    <main className="h-full min-w-0 flex-1 overflow-y-auto bg-[radial-gradient(var(--ink-faint)_1px,transparent_1px)] px-6 py-8 [background-size:32px_32px] sm:px-10 lg:px-16 lg:py-12">
+    <main className="h-full min-w-0 flex-1 overflow-y-auto bg-[radial-gradient(var(--ink-faint)_1px,transparent_1px)] [background-size:32px_32px] px-6 py-8 sm:px-10 lg:px-16 lg:py-12">
       <div className="mb-8 flex flex-wrap items-end justify-between gap-4 lg:mb-12">
         <div className="min-w-0">
           <h1 className="font-display text-ink text-[clamp(2.75rem,8vw,5rem)] leading-[0.85] break-words">
@@ -68,11 +69,11 @@ export function HomeView({
               )}
               <div className="text-ink mb-1 truncate text-[1.05rem] font-bold">{m.title}</div>
               <div className="text-ink-muted font-mono text-[0.65rem] tracking-[0.1em] uppercase">
-                {m.date}
+                {formatMeetingDate(m.createdAt)}
               </div>
               <div className="text-accent mt-2 font-mono text-[0.65rem] tracking-[0.1em] uppercase">
                 {STATUS_LABEL[m.status || 'idle']}
-                {m.transcript?.length ? ` // ${m.transcript.length} segments` : ''}
+                {m.segmentCount ? ` // ${m.segmentCount} segments` : ''}
               </div>
             </button>
           ))}

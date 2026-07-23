@@ -5,30 +5,49 @@ export type RecordingPayload = {
   level: number; // 0..100 RMS of the mic input
 };
 
+/**
+ * One transcript turn. `id` is the SQLite row id: stable for the lifetime of the
+ * segment so the summary can cite it. `startMs` is the absolute offset from the
+ * start of the meeting's recording, continuous across pause/resume and chunks.
+ */
 export type TranscriptSegment = {
-  id: string;
+  id: number;
+  meetingId: string;
   speaker: string;
-  time: string;
+  startMs: number;
+  endMs: number | null;
   text: string;
-  // Absolute offset in ms from the start of the meeting's recording. Kept
-  // continuous across pause/resume and across chunks so seeking is accurate.
-  offsetMs?: number;
+  position: number;
+};
+
+/** A segment being created, before the database assigns it an id. */
+export type TranscriptSegmentInput = {
+  speaker?: string;
+  startMs?: number;
+  endMs?: number | null;
+  text?: string;
 };
 
 export type Meeting = {
   id: string;
   title: string;
-  date?: string;
-  status?: 'idle' | 'recording' | 'transcribing' | 'complete';
+  status: 'idle' | 'recording' | 'transcribing' | 'complete';
   folder?: string;
   tags?: string[];
+  /** `mtfile://` URL of the cover image stored under userData/covers. */
   coverImage?: string;
   language?: string;
   instruction?: string;
-  durationSeconds?: number;
-  // Absolute path to the persisted audio file on disk (set once flushed on stop).
+  durationSeconds: number;
+  /** Absolute path to the persisted audio file on disk. */
   audioPath?: string;
-  transcript?: TranscriptSegment[];
   notes?: string;
   summary?: string;
+  segmentCount: number;
+  createdAt: number;
+  updatedAt: number;
 };
+
+export type MeetingPatch = Partial<
+  Omit<Meeting, 'id' | 'coverImage' | 'segmentCount' | 'createdAt' | 'updatedAt'>
+>;
