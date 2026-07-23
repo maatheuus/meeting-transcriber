@@ -1,23 +1,7 @@
 import { useEffect, useRef, useMemo, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
-import type { Meeting, TranscriptSegment } from '@renderer/types';
-
-/** "MM:SS" (or "HH:MM:SS") -> seconds, for seeking the player. */
-function timeToSeconds(time: string): number {
-  const parts = time.split(':').map(Number);
-  if (parts.some(Number.isNaN)) return 0;
-  return parts.reduce((total, part) => total * 60 + part, 0);
-}
-
-function secondsToTime(seconds: number): string {
-  const m = Math.floor(seconds / 60)
-    .toString()
-    .padStart(2, '0');
-  const s = Math.floor(seconds % 60)
-    .toString()
-    .padStart(2, '0');
-  return `${m}:${s}`;
-}
+import { msToTime, timeToSeconds } from '@renderer/lib/utils';
+import type { TranscriptSegment, TranscriptSegmentInput } from '@renderer/types';
 
 function highlightText(text: string, query: string) {
   if (!query.trim()) return text;
@@ -42,51 +26,53 @@ function autoResize(el: HTMLTextAreaElement | null) {
 }
 
 export function TranscriptTab({
-  meeting,
-  onPatchMeeting,
+  segments,
+  onUpdateSegment,
+  onAddSegment,
+  onRemoveSegment,
+  onRenameSpeaker,
   isRecording,
   searchQuery = '',
   onSeek,
 }: {
-  meeting: Meeting;
-  onPatchMeeting: (patch: Partial<Meeting>) => void;
+  segments: TranscriptSegment[];
+  onUpdateSegment: (id: number, patch: TranscriptSegmentInput) => void;
+  onAddSegment: (segment: TranscriptSegmentInput) => Promise<TranscriptSegment>;
+  onRemoveSegment: (id: number) => void;
+  onRenameSpeaker: (from: string, to: string) => void;
   isRecording?: boolean;
   searchQuery?: string;
   onSeek?: (seconds: number) => void;
 }) {
-  const segments = useMemo(() => meeting.transcript || [], [meeting.transcript]);
-  const [editingSegmentId, setEditingSegmentId] = useState<string | null>(null);
-  const [editingSpeakerId, setEditingSpeakerId] = useState<string | null>(null);
+  const [editingSegmentId, setEditingSegmentId] = useState<number | null>(null);
+  const [editingSpeakerId, setEditingSpeakerId] = useState<number | null>(null);
+  // The timestamp is stored in milliseconds, so the "MM:SS" text is only kept
+  // while a field is being typed into and parsed back when the user commits.
+  const [timeDraft, setTimeDraft] = useState<{ id: number; value: string } | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  const updateSegments = (next: TranscriptSegment[]) => onPatchMeeting({ transcript: next });
-
-  const patchSegment = (id: string, patch: Partial<TranscriptSegment>) =>
-    updateSegments(segments.map((s) => (s.id === id ? { ...s, ...patch } : s)));
-
-  /** Renaming a speaker renames every one of their turns, as before. */
   const renameSpeaker = (from: string, to: string) => {
     const name = to.trim();
     setEditingSpeakerId(null);
     if (!name || name === from) return;
-    updateSegments(segments.map((s) => (s.speaker === from ? { ...s, speaker: name } : s)));
+    onRenameSpeaker(from, name);
   };
 
-  const addSegment = () => {
+  const commitTime = (id: number, value: string) => {
+    setTimeDraft(null);
+    onUpdateSegment(id, { startMs: Math.round(timeToSeconds(value) * 1000) });
+  };
+
+  const addSegment = async () => {
     const last = segments[segments.length - 1];
-    const seconds = last ? timeToSeconds(last.time) + 5 : 0;
-    const newSegment: TranscriptSegment = {
-      id: `${Date.now()}`,
+    const startMs = last ? last.startMs + 5000 : 0;
+    const created = await onAddSegment({
       speaker: last?.speaker || 'Speaker 1',
-      time: secondsToTime(seconds),
-      offsetMs: seconds * 1000,
+      startMs,
       text: '',
-    };
-    updateSegments([...segments, newSegment]);
-    setEditingSegmentId(newSegment.id);
+    });
+    setEditingSegmentId(created.id);
   };
-
-  const removeSegment = (id: string) => updateSegments(segments.filter((s) => s.id !== id));
 
   useEffect(() => {
     if (isRecording) bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
@@ -124,20 +110,20 @@ export function TranscriptTab({
           <div key={segment.id} className="group flex gap-4">
             <div className="w-16 shrink-0 pt-0.5">
               <input
-                value={segment.time}
-                onChange={(e) =>
-                  patchSegment(segment.id, {
-                    time: e.target.value,
-                    offsetMs: timeToSeconds(e.target.value) * 1000,
-                  })
+                value={timeDraft?.id === segment.id ? timeDraft.value : msToTime(segment.startMs)}
+                onChange={(e) => setTimeDraft({ id: segment.id, value: e.target.value })}
+                // Only writes when the field was actually typed into, so a
+                // click that just seeks the player leaves the timestamp alone.
+                onBlur={(e) =>
+                  timeDraft?.id === segment.id
+                    ? commitTime(segment.id, e.target.value)
+                    : setTimeDraft(null)
                 }
-                onClick={() =>
-                  onSeek?.(
-                    segment.offsetMs != null
-                      ? segment.offsetMs / 1000
-                      : timeToSeconds(segment.time),
-                  )
-                }
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                  if (e.key === 'Escape') setTimeDraft(null);
+                }}
+                onClick={() => onSeek?.(segment.startMs / 1000)}
                 className="text-accent focus:border-accent w-full bg-transparent font-mono text-[0.8rem] underline outline-none focus:border-b-2 focus:no-underline"
                 title={
                   onSeek
@@ -175,7 +161,7 @@ export function TranscriptTab({
                   value={segment.text}
                   onChange={(e) => {
                     autoResize(e.target);
-                    patchSegment(segment.id, { text: e.target.value });
+                    onUpdateSegment(segment.id, { text: e.target.value });
                   }}
                   onBlur={() => setEditingSegmentId(null)}
                   onKeyDown={(e) => {
@@ -199,7 +185,7 @@ export function TranscriptTab({
               )}
             </div>
             <button
-              onClick={() => removeSegment(segment.id)}
+              onClick={() => onRemoveSegment(segment.id)}
               className="text-ink-muted h-6 shrink-0 p-1 opacity-0 transition-all group-hover:opacity-100 hover:text-[#E53935]"
               title="Delete line"
             >

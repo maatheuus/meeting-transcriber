@@ -1,8 +1,13 @@
 import { Modal } from '@renderer/components/ui/modal';
 import { loadSettings } from '@renderer/lib/settings';
-import { cn } from '@renderer/lib/utils';
+import { cn, formatDuration, timeToSeconds } from '@renderer/lib/utils';
 import { audioService, getRecording, setRecording } from '@renderer/services/audio';
-import type { Meeting, TranscriptSegment } from '@renderer/types';
+import type {
+  Meeting,
+  MeetingPatch,
+  TranscriptSegment,
+  TranscriptSegmentInput,
+} from '@renderer/types';
 import {
   ArrowLeft,
   Camera,
@@ -33,54 +38,29 @@ type RecordState = 'idle' | 'recording' | 'paused';
 
 const PLAYBACK_RATES = [0.75, 1, 1.25, 1.5, 2];
 
-function formatDuration(seconds: number) {
-  if (!Number.isFinite(seconds) || seconds < 0) seconds = 0;
-  const m = Math.floor(seconds / 60)
-    .toString()
-    .padStart(2, '0');
-  const s = Math.floor(seconds % 60)
-    .toString()
-    .padStart(2, '0');
-  return `${m}:${s}`;
-}
-
-/** "MM:SS" (or "HH:MM:SS") -> seconds. */
-function timeToSeconds(time: string): number {
-  const parts = time.split(':').map(Number);
-  if (parts.some(Number.isNaN)) return 0;
-  return parts.reduce((total, part) => total * 60 + part, 0);
-}
-
 /**
  * The model is asked for a JSON array of turns; fall back to one plain segment.
  * `offsetSeconds` is the recorded time already accumulated before this chunk, so
  * every turn is shifted onto the meeting's continuous timeline (absolute offset).
  */
-function parseTranscript(raw: string, offsetSeconds = 0): TranscriptSegment[] {
+function parseTranscript(raw: string, offsetSeconds = 0): TranscriptSegmentInput[] {
   const cleaned = raw
     .trim()
     .replace(/^```(?:json)?/i, '')
     .replace(/```$/, '')
     .trim();
 
-  const shift = (rawTime: string): { time: string; offsetMs: number } => {
-    const abs = offsetSeconds + timeToSeconds(rawTime);
-    return { time: formatDuration(abs), offsetMs: Math.round(abs * 1000) };
-  };
+  const shift = (rawTime: string): number =>
+    Math.round((offsetSeconds + timeToSeconds(rawTime)) * 1000);
 
   try {
     const parsed = JSON.parse(cleaned);
     if (Array.isArray(parsed)) {
-      return parsed.map((item, i) => {
-        const { time, offsetMs } = shift(typeof item.time === 'string' ? item.time : '00:00');
-        return {
-          id: `${Date.now()}_${i}`,
-          speaker: typeof item.speaker === 'string' ? item.speaker : 'Speaker 1',
-          time,
-          offsetMs,
-          text: typeof item.text === 'string' ? item.text : String(item),
-        };
-      });
+      return parsed.map((item) => ({
+        speaker: typeof item.speaker === 'string' ? item.speaker : 'Speaker 1',
+        startMs: shift(typeof item.time === 'string' ? item.time : '00:00'),
+        text: typeof item.text === 'string' ? item.text : String(item),
+      }));
     }
   } catch {
     // Not JSON — keep the raw text as a single segment.
@@ -88,10 +68,8 @@ function parseTranscript(raw: string, offsetSeconds = 0): TranscriptSegment[] {
 
   return [
     {
-      id: `${Date.now()}_0`,
       speaker: 'Speaker 1',
-      time: formatDuration(offsetSeconds),
-      offsetMs: Math.round(offsetSeconds * 1000),
+      startMs: Math.round(offsetSeconds * 1000),
       text: cleaned,
     },
   ];
@@ -99,11 +77,15 @@ function parseTranscript(raw: string, offsetSeconds = 0): TranscriptSegment[] {
 
 export function MeetingView({
   meeting,
-  onUpdateMeeting,
+  onPatchMeeting,
+  onSetCover,
+  onSegmentCountChange,
   onBack,
 }: {
   meeting: Meeting;
-  onUpdateMeeting: (m: Meeting) => void;
+  onPatchMeeting: (id: string, patch: MeetingPatch) => void;
+  onSetCover: (id: string, dataUrl: string) => Promise<void>;
+  onSegmentCountChange: (id: string, count: number) => void;
   onBack: () => void;
 }) {
   const [activeTab, setActiveTab] = useState<TabType>('transcript');
@@ -114,6 +96,7 @@ export function MeetingView({
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [audioLevels, setAudioLevels] = useState<number[]>([10, 10, 10, 10, 10, 10]);
+  const [segments, setSegments] = useState<TranscriptSegment[]>([]);
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const [audioUrl, setAudioUrl] = useState<string | undefined>(() => getRecording(meeting.id));
@@ -143,9 +126,54 @@ export function MeetingView({
   const sessionOffsetRef = useRef(0);
 
   const patchMeeting = useCallback(
-    (patch: Partial<Meeting>) => onUpdateMeeting({ ...meetingRef.current, ...patch }),
-    [onUpdateMeeting],
+    (patch: MeetingPatch) => onPatchMeeting(meetingRef.current.id, patch),
+    [onPatchMeeting],
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    window.api.segments
+      .list(meeting.id)
+      .then((loaded) => {
+        if (!cancelled) setSegments(loaded);
+      })
+      .catch((e) => console.error('Failed to load transcript', e));
+    return () => {
+      cancelled = true;
+    };
+  }, [meeting.id]);
+
+  useEffect(() => {
+    onSegmentCountChange(meeting.id, segments.length);
+  }, [meeting.id, segments.length, onSegmentCountChange]);
+
+  const updateSegment = useCallback((id: number, patch: TranscriptSegmentInput) => {
+    setSegments((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+    window.api.segments
+      .update(id, patch)
+      .catch((e) => console.error('Failed to save transcript line', e));
+  }, []);
+
+  const addSegment = useCallback(async (segment: TranscriptSegmentInput) => {
+    const created = await window.api.segments.insert(meetingRef.current.id, segment);
+    setSegments((prev) => [...prev, created]);
+    return created;
+  }, []);
+
+  const removeSegment = useCallback((id: number) => {
+    setSegments((prev) => prev.filter((s) => s.id !== id));
+    window.api.segments
+      .delete(id)
+      .catch((e) => console.error('Failed to delete transcript line', e));
+  }, []);
+
+  /** Renaming a speaker renames every one of their turns, as before. */
+  const renameSpeaker = useCallback((from: string, to: string) => {
+    setSegments((prev) => prev.map((s) => (s.speaker === from ? { ...s, speaker: to } : s)));
+    window.api.segments
+      .renameSpeaker(meetingRef.current.id, from, to)
+      .catch((e) => console.error('Failed to rename speaker', e));
+  }, []);
 
   useEffect(() => {
     if (recordState !== 'recording') return;
@@ -209,10 +237,11 @@ export function MeetingView({
 
     reader.onloadend = async () => {
       const base64data = (reader.result as string).split(',')[1];
+      const meetingId = meetingRef.current.id;
       try {
-        const knownSpeakers = Array.from(
-          new Set((meetingRef.current.transcript || []).map((s) => s.speaker).filter(Boolean)),
-        );
+        // Labels already seen in this meeting keep speaker naming consistent
+        // across the separately transcribed chunks of one recording.
+        const knownSpeakers = await window.api.segments.knownSpeakers(meetingId);
 
         const text = await window.api.gemini.transcribe({
           audioBase64: base64data,
@@ -223,13 +252,12 @@ export function MeetingView({
           knownSpeakers: knownSpeakers.length ? knownSpeakers : undefined,
         });
 
-        patchMeeting({
-          transcript: [
-            ...(meetingRef.current.transcript || []),
-            ...parseTranscript(text || '', offsetSeconds),
-          ],
-          status: 'complete',
-        });
+        const created = await window.api.segments.append(
+          meetingId,
+          parseTranscript(text || '', offsetSeconds),
+        );
+        setSegments((prev) => [...prev, ...created]);
+        patchMeeting({ status: 'complete' });
         setLastSaved(new Date());
         toast.success('Transcription complete');
       } catch (err: any) {
@@ -319,7 +347,7 @@ export function MeetingView({
       const res = await window.api.screenshot.region();
       if (res.supported) {
         if (res.dataUrl) {
-          patchMeeting({ coverImage: res.dataUrl });
+          await onSetCover(meetingRef.current.id, res.dataUrl);
           toast.success('Screenshot set as cover image');
         }
         return;
@@ -342,7 +370,7 @@ export function MeetingView({
       canvas.height = video.videoHeight;
       canvas.getContext('2d')?.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-      patchMeeting({ coverImage: canvas.toDataURL('image/jpeg', 0.5) });
+      await onSetCover(meetingRef.current.id, canvas.toDataURL('image/jpeg', 0.5));
       track.stop();
       toast.success('Screenshot set as cover image');
     } catch (err: any) {
@@ -429,7 +457,7 @@ export function MeetingView({
 
   const hasRecording = Boolean(audioUrl);
   const progress = audioDuration ? (currentTime / audioDuration) * 100 : 0;
-  const isBlank = !meeting.transcript?.length && recordState === 'idle' && !hasRecording;
+  const isBlank = !segments.length && recordState === 'idle' && !hasRecording;
 
   return (
     <main className="relative grid h-full min-w-0 flex-1 grid-rows-[auto_1fr_auto] bg-[radial-gradient(var(--ink-faint)_1px,transparent_1px)] [background-size:32px_32px]">
@@ -664,13 +692,16 @@ export function MeetingView({
 
         <div className="pb-8" ref={contentRef}>
           {activeTab === 'summary' && (
-            <SummaryTab meeting={meeting} onPatchMeeting={patchMeeting} />
+            <SummaryTab meeting={meeting} segments={segments} onPatchMeeting={patchMeeting} />
           )}
           {activeTab === 'notes' && <NotesTab meeting={meeting} onPatchMeeting={patchMeeting} />}
           {activeTab === 'transcript' && (
             <TranscriptTab
-              meeting={meeting}
-              onPatchMeeting={patchMeeting}
+              segments={segments}
+              onUpdateSegment={updateSegment}
+              onAddSegment={addSegment}
+              onRemoveSegment={removeSegment}
+              onRenameSpeaker={renameSpeaker}
               isRecording={recordState === 'recording'}
               searchQuery={searchQuery}
               onSeek={hasRecording ? seekTo : undefined}
