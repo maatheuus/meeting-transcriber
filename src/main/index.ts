@@ -1,10 +1,51 @@
 import { electronApp, is, optimizer } from '@electron-toolkit/utils';
-import { app, BrowserWindow, desktopCapturer, ipcMain, shell, systemPreferences } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  desktopCapturer,
+  ipcMain,
+  screen,
+  shell,
+  systemPreferences,
+} from 'electron';
+import { readFileSync } from 'fs';
 import { join } from 'path';
 import icon from '../../resources/icon.png?asset';
+import { listModels, transcribe, chatFast, chatThink } from './gemini';
+
+// electron-vite does not inject .env into the runtime process, so load it here
+// for local dev. In a packaged build there is no .env and the API key entered
+// in Settings is used instead.
+function loadDotenv(): void {
+  try {
+    const content = readFileSync(join(process.cwd(), '.env'), 'utf-8');
+    for (const line of content.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const eq = trimmed.indexOf('=');
+      if (eq === -1) continue;
+      const key = trimmed.slice(0, eq).trim();
+      let value = trimmed.slice(eq + 1).trim();
+      if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.slice(1, -1);
+      }
+      if (key && process.env[key] === undefined) process.env[key] = value;
+    }
+  } catch {
+    // No .env present — rely on the key configured in Settings.
+  }
+}
+
+loadDotenv();
+
+let mainWindow: BrowserWindow | null = null;
+let overlayWindow: BrowserWindow | null = null;
 
 function createWindow(): void {
-  const mainWindow = new BrowserWindow({
+  const win = new BrowserWindow({
     width: 900,
     height: 670,
     minHeight: 400,
@@ -18,41 +59,100 @@ function createWindow(): void {
       sandbox: false,
     },
   });
+  mainWindow = win;
 
-  mainWindow.on('ready-to-show', () => {
-    mainWindow.show();
+  win.on('ready-to-show', () => {
+    win.show();
   });
 
-  mainWindow.webContents.setWindowOpenHandler((details) => {
+  win.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url);
     return { action: 'deny' };
   });
 
+  win.on('closed', () => {
+    mainWindow = null;
+  });
+
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL']);
+    win.loadURL(process.env['ELECTRON_RENDERER_URL']);
   } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'));
+    win.loadFile(join(__dirname, '../renderer/index.html'));
   }
 }
 
-// This method will be called when Electron has finished
-// initialization and is ready to create browser windows.
-// Some APIs can only be used after this event occurs.
+// Small frameless, transparent, always-on-top window that shows the recording
+// pill (waveform + pause/resume/stop) floating outside the main window.
+function createOverlayWindow(): void {
+  overlayWindow = new BrowserWindow({
+    width: 240,
+    height: 80,
+    show: false,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    resizable: false,
+    movable: true,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    hasShadow: false,
+    alwaysOnTop: true,
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      sandbox: false,
+    },
+  });
+
+  // Sit above full-screen apps too, like a system HUD.
+  overlayWindow.setAlwaysOnTop(true, 'screen-saver');
+  overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+
+  overlayWindow.on('closed', () => {
+    overlayWindow = null;
+  });
+
+  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    overlayWindow.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/overlay.html`);
+  } else {
+    overlayWindow.loadFile(join(__dirname, '../renderer/overlay.html'));
+  }
+}
+
+function positionOverlay(): void {
+  if (!overlayWindow) return;
+  const { workArea } = screen.getPrimaryDisplay();
+  const { width, height } = overlayWindow.getBounds();
+  overlayWindow.setPosition(
+    Math.round(workArea.x + (workArea.width - width) / 2),
+    Math.round(workArea.y + workArea.height - height - 48),
+  );
+}
+
+function showOverlay(): void {
+  if (!overlayWindow) createOverlayWindow();
+  const reveal = (): void => {
+    positionOverlay();
+    // showInactive keeps focus on whatever the user was doing.
+    overlayWindow?.showInactive();
+  };
+  if (overlayWindow?.webContents.isLoading()) {
+    overlayWindow.once('ready-to-show', reveal);
+  } else {
+    reveal();
+  }
+}
+
 app.whenReady().then(() => {
-  // Set app user model id for windows
   electronApp.setAppUserModelId('com.electron');
 
-  // Default open or close DevTools by F12 in development
-  // and ignore CommandOrControl + R in production.
-  // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window);
   });
 
-  // IPC test
   ipcMain.on('ping', () => console.log('pong'));
 
-  // Audio capture permissions and sources
   ipcMain.handle('get-desktop-sources', async (_, opts) => {
     return await desktopCapturer.getSources(opts);
   });
@@ -64,23 +164,27 @@ app.whenReady().then(() => {
     return true;
   });
 
+  ipcMain.handle('gemini:list-models', (_e, apiKey?: string) => listModels(apiKey));
+  ipcMain.handle('gemini:transcribe', (_e, args) => transcribe(args));
+  ipcMain.handle('gemini:chat-fast', (_e, args) => chatFast(args));
+  ipcMain.handle('gemini:chat-think', (_e, args) => chatThink(args));
+
+  ipcMain.on('overlay:show', () => showOverlay());
+  ipcMain.on('overlay:hide', () => overlayWindow?.hide());
+  ipcMain.on('overlay:command', (_e, cmd) => mainWindow?.webContents.send('recording:command', cmd));
+  ipcMain.on('recording:update', (_e, payload) =>
+    overlayWindow?.webContents.send('recording:state', payload),
+  );
+
   createWindow();
 
   app.on('activate', function () {
-    // On macOS it's common to re-create a window in the app when the
-    // dock icon is clicked and there are no other windows open.
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
 
-// Quit when all windows are closed, except on macOS. There, it's common
-// for applications and their menu bar to stay active until the user quits
-// explicitly with Cmd + Q.
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
 });
-
-// In this file you can include the rest of your app's specific main process
-// code. You can also put them in separate files and require them here.

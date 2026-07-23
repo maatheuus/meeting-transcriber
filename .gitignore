@@ -6,3 +6,5 @@ out
 *.log*
 .yarn/install-state.gz
 .env
+# pasted source project (ported into src/)
+Meeting Transcriber/
