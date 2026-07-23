@@ -30,6 +30,11 @@ declare global {
         load: (filePath: string) => Promise<{ data: Uint8Array; mimeType: string } | null>;
         delete: (meetingId: string) => Promise<void>;
       };
+      screenshot: {
+        region: () => Promise<
+          { supported: false } | { supported: true; dataUrl: string | null }
+        >;
+      };
       overlay: {
         show: () => void;
         hide: () => void;
@@ -39,8 +44,8 @@ declare global {
         onState: (
           cb: (payload: { state: 'idle' | 'recording' | 'paused'; level: number }) => void,
         ) => () => void;
-        sendCommand: (cmd: 'pause' | 'resume' | 'stop') => void;
-        onCommand: (cb: (cmd: 'pause' | 'resume' | 'stop') => void) => () => void;
+        sendCommand: (cmd: 'pause' | 'resume' | 'stop' | 'capture') => void;
+        onCommand: (cb: (cmd: 'pause' | 'resume' | 'stop' | 'capture') => void) => () => void;
       };
     };
   }

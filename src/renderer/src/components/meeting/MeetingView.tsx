@@ -1,32 +1,32 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
-import { cn } from '@renderer/lib/utils';
-import { SummaryTab } from './SummaryTab';
-import { TranscriptTab } from './TranscriptTab';
-import { NotesTab } from './NotesTab';
-import { MeetingLanguageMenu } from './MeetingLanguageMenu';
 import { Modal } from '@renderer/components/ui/modal';
+import { loadSettings } from '@renderer/lib/settings';
+import { cn } from '@renderer/lib/utils';
+import { audioService, getRecording, setRecording } from '@renderer/services/audio';
+import type { Meeting, TranscriptSegment } from '@renderer/types';
 import {
-  Play,
-  Pause,
-  Square,
-  Mic,
-  Copy,
-  Save,
-  Tag,
-  FolderOpen,
-  Search,
-  HelpCircle,
-  X,
-  Camera,
   ArrowLeft,
+  Camera,
+  Copy,
+  FolderOpen,
+  HelpCircle,
+  Mic,
+  Pause,
+  Play,
+  Save,
+  Search,
   SkipBack,
   SkipForward,
+  Square,
+  Tag,
   Volume2,
+  X,
 } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { audioService, getRecording, setRecording } from '@renderer/services/audio';
-import { loadSettings } from '@renderer/lib/settings';
-import type { Meeting, TranscriptSegment } from '@renderer/types';
+import { MeetingLanguageMenu } from './MeetingLanguageMenu';
+import { NotesTab } from './NotesTab';
+import { SummaryTab } from './SummaryTab';
+import { TranscriptTab } from './TranscriptTab';
 
 type TabType = 'summary' | 'notes' | 'transcript';
 type RecordState = 'idle' | 'recording' | 'paused';
@@ -169,7 +169,7 @@ export function MeetingView({
   }, [recordState]);
 
   // A ref keeps the overlay command handlers current without re-subscribing every render.
-  const commandRef = useRef<(cmd: 'pause' | 'resume' | 'stop') => void>(() => {});
+  const commandRef = useRef<(cmd: 'pause' | 'resume' | 'stop' | 'capture') => void>(() => {});
   useEffect(() => {
     const off = window.api.recording.onCommand((cmd) => commandRef.current(cmd));
     return off;
@@ -311,9 +311,24 @@ export function MeetingView({
     if (cmd === 'pause') handlePause();
     else if (cmd === 'resume') handleResume();
     else if (cmd === 'stop') handleStop();
+    else if (cmd === 'capture') captureScreenshot();
   };
 
   const captureScreenshot = async () => {
+    try {
+      const res = await window.api.screenshot.region();
+      if (res.supported) {
+        if (res.dataUrl) {
+          patchMeeting({ coverImage: res.dataUrl });
+          toast.success('Screenshot set as cover image');
+        }
+        return;
+      }
+    } catch (err: any) {
+      toast.error('Failed to capture screenshot: ' + (err?.message || 'unknown error'));
+      return;
+    }
+
     try {
       const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
       const track = stream.getVideoTracks()[0];
@@ -700,6 +715,13 @@ export function MeetingView({
               </button>
             </>
           )}
+          <button
+            onClick={captureScreenshot}
+            className="border-ink bg-card hover:bg-ink hover:text-bg flex h-10 w-10 items-center justify-center border-2 transition-colors"
+            title="Capture Screen for Cover Image"
+          >
+            <Camera size={16} />
+          </button>
           {recordState !== 'idle' && (
             <div className="text-accent flex items-center gap-2 px-3 font-mono text-[0.8rem] font-bold">
               <span

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Pause, Play, Square } from 'lucide-react';
+import { Camera, Pause, Play, Square } from 'lucide-react';
 import type { RecordingState } from '@renderer/types';
 
 const BAR_COUNT = 7;
@@ -21,7 +21,8 @@ export function Overlay(): React.JSX.Element {
     return off;
   }, []);
 
-  const send = (cmd: 'pause' | 'resume' | 'stop'): void => window.api.recording.sendCommand(cmd);
+  const send = (cmd: 'pause' | 'resume' | 'stop' | 'capture'): void =>
+    window.api.recording.sendCommand(cmd);
 
   return (
     <div className="pill-wrap">
@@ -48,6 +49,9 @@ export function Overlay(): React.JSX.Element {
               <Play size={15} className="ml-[1px]" />
             </button>
           )}
+          <button className="btn" title="Capture screen" onClick={() => send('capture')}>
+            <Camera size={15} />
+          </button>
           <button className="btn stop" title="Stop" onClick={() => send('stop')}>
             <Square size={13} fill="currentColor" />
           </button>
