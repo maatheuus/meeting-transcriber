@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
-import { Camera, Pause, Play, Square } from 'lucide-react';
 import type { RecordingState } from '@renderer/types';
+import { Camera, Pause, Play, Square } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 const BAR_COUNT = 7;
 
@@ -33,7 +33,7 @@ export function Overlay(): React.JSX.Element {
           <span />
         </div>
 
-        <div className={`wave${state === 'paused' ? ' paused' : ''}`}>
+        <div className={`wave ${state === 'paused' ? 'paused' : ''}`}>
           {bars.map((level, i) => (
             <div key={i} className="bar" style={{ height: `${state === 'paused' ? 6 : level}%` }} />
           ))}
@@ -46,7 +46,7 @@ export function Overlay(): React.JSX.Element {
             </button>
           ) : (
             <button className="btn" title="Resume" onClick={() => send('resume')}>
-              <Play size={15} className="ml-[1px]" />
+              <Play size={15} className="ml-px" />
             </button>
           )}
           <button className="btn" title="Capture screen" onClick={() => send('capture')}>
