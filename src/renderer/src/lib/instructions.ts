@@ -1,17 +1,10 @@
-export type InstructionSection = {
-  id: number;
-  title: string;
-  instructions: string;
-};
-
 export type InstructionTemplate = {
   id: string;
   name: string;
   icon: string;
   isDefault?: boolean;
   isBuiltin?: boolean;
-  context?: string;
-  format?: InstructionSection[];
+  prompt?: string;
 };
 
 /**
@@ -35,19 +28,10 @@ export function saveTemplates(templates: InstructionTemplate[]): void {
     .catch((e) => console.error('Failed to save summary templates', e));
 }
 
-/** Turns a template into the instruction block appended to the summary prompt. */
 export function templateToPrompt(template: InstructionTemplate): string {
   const parts = [`Summary style: ${template.name}.`];
 
-  if (template.context) parts.push(`Context: ${template.context}`);
+  if (template.prompt) parts.push(template.prompt);
 
-  const sections = template.format?.filter((s) => s.title || s.instructions) || [];
-  if (sections.length) {
-    parts.push(
-      'Use exactly these sections:\n' +
-        sections.map((s) => `- ${s.title || 'Section'}: ${s.instructions}`).join('\n'),
-    );
-  }
-
-  return parts.join('\n');
+  return parts.join('\n\n');
 }

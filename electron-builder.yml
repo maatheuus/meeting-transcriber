@@ -2,6 +2,7 @@ appId: com.transcriber.app
 productName: Transcriber
 directories:
   buildResources: build
+  output: /Users/matheus/Downloads/transcriber_download
 files:
   - '!**/.vscode/*'
   - '!src/*'
