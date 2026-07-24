@@ -4,6 +4,11 @@ import { contextBridge, ipcRenderer } from 'electron';
 const api = {
   getDesktopSources: (opts: any) => ipcRenderer.invoke('get-desktop-sources', opts),
   requestMicrophonePermission: () => ipcRenderer.invoke('request-microphone-permission'),
+  permissions: {
+    getStatus: () => ipcRenderer.invoke('permissions:get-status'),
+    requestMicrophone: () => ipcRenderer.invoke('permissions:request-microphone'),
+    openScreenSettings: () => ipcRenderer.invoke('permissions:open-screen-settings'),
+  },
   gemini: {
     listModels: (apiKey?: string) => ipcRenderer.invoke('gemini:list-models', apiKey),
     transcribe: (args: {
@@ -71,6 +76,16 @@ const api = {
       ipcRenderer.invoke('audio:save', args),
     load: (filePath: string) => ipcRenderer.invoke('audio:load', filePath),
     delete: (meetingId: string) => ipcRenderer.invoke('audio:delete', meetingId),
+  },
+  logs: {
+    list: () => ipcRenderer.invoke('logs:list'),
+    clear: () => ipcRenderer.invoke('logs:clear'),
+    push: (entry: {
+      level: 'error' | 'warn' | 'info';
+      source: string;
+      message: string;
+      detail?: string;
+    }) => ipcRenderer.invoke('logs:push', entry),
   },
   screenshot: {
     region: () => ipcRenderer.invoke('screenshot:region'),

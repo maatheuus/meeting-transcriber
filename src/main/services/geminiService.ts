@@ -1,9 +1,11 @@
 import { GoogleGenAI, ThinkingLevel } from '@google/genai';
 
 // The "-latest" aliases track the current GA model, avoiding hardcoded ids that get retired.
+// `gemini-pro-latest` currently resolves to a paid-tier-only model (gemini-3.1-pro), so the
+// default think model is pinned to a free-tier-eligible one.
 const DEFAULT_TRANSCRIBE_MODEL = 'gemini-flash-latest';
 const DEFAULT_FAST_MODEL = 'gemini-flash-lite-latest';
-const DEFAULT_THINK_MODEL = 'gemini-pro-latest';
+const DEFAULT_THINK_MODEL = 'gemini-2.5-flash';
 
 let client: GoogleGenAI | null = null;
 
