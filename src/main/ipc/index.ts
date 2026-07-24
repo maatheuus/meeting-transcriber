@@ -1,6 +1,7 @@
 import { registerAudioIpc } from './audio';
 import { registerFoldersIpc } from './folders';
 import { registerGeminiIpc } from './gemini';
+import { registerLogsIpc } from './logs';
 import { registerMeetingsIpc } from './meetings';
 import { registerMigrationIpc } from './migration';
 import { registerSearchIpc } from './search';
@@ -19,4 +20,5 @@ export function registerIpc(): void {
   registerAudioIpc();
   registerMigrationIpc();
   registerGeminiIpc();
+  registerLogsIpc();
 }

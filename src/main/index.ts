@@ -207,6 +207,33 @@ app.whenReady().then(() => {
     return true;
   });
 
+  ipcMain.handle('permissions:get-status', () => {
+    if (process.platform !== 'darwin') {
+      return { platform: process.platform, microphone: 'granted', screen: 'granted' };
+    }
+    return {
+      platform: 'darwin',
+      microphone: systemPreferences.getMediaAccessStatus('microphone'),
+      screen: systemPreferences.getMediaAccessStatus('screen'),
+    };
+  });
+
+  ipcMain.handle('permissions:request-microphone', async () => {
+    if (process.platform !== 'darwin') return true;
+    return await systemPreferences.askForMediaAccess('microphone');
+  });
+
+  ipcMain.handle('permissions:open-screen-settings', async () => {
+    if (process.platform !== 'darwin') return false;
+    // macOS gives no API to prompt for Screen Recording; the OS shows the
+    // prompt on first capture, and after a denial the user must toggle it
+    // in System Settings manually.
+    await shell.openExternal(
+      'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture',
+    );
+    return true;
+  });
+
   ipcMain.handle('screenshot:region', async () => {
     if (process.platform !== 'darwin') return { supported: false as const };
     const tmp = join(app.getPath('temp'), `mt-shot-${Date.now()}.png`);

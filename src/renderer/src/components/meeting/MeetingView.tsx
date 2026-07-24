@@ -14,6 +14,7 @@ import {
   Copy,
   FolderOpen,
   HelpCircle,
+  Loader2,
   Mic,
   Pause,
   Play,
@@ -656,6 +657,20 @@ export function MeetingView({
               >
                 Write it myself
               </button>
+            </div>
+          </div>
+        )}
+
+        {meeting.status === 'transcribing' && (
+          <div className="border-ink bg-accent/10 mt-6 flex items-center gap-3 border-[3px] p-4 shadow-[4px_4px_0_var(--ink)]">
+            <Loader2 size={20} className="text-accent shrink-0 animate-spin" />
+            <div className="min-w-0">
+              <div className="text-ink font-mono text-[0.8rem] font-bold uppercase">
+                Transcribing recording…
+              </div>
+              <div className="text-ink-muted font-mono text-[0.7rem]">
+                Sending audio to Gemini. This may take a moment for longer meetings.
+              </div>
             </div>
           </div>
         )}

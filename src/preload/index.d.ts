@@ -68,6 +68,19 @@ type SearchHit = {
 
 type SearchResult = { meetingIds: string[]; segments: SearchHit[] };
 
+type MediaPermissionStatus = 'not-determined' | 'granted' | 'denied' | 'restricted' | 'unknown';
+
+type LogLevel = 'error' | 'warn' | 'info';
+
+type LogEntry = {
+  id: number;
+  timestamp: number;
+  level: LogLevel;
+  source: string;
+  message: string;
+  detail?: string;
+};
+
 type LegacyPayload = {
   meetings?: unknown[] | null;
   folders?: string[] | null;
@@ -82,6 +95,15 @@ declare global {
     api: {
       getDesktopSources: (opts: any) => Promise<any[]>;
       requestMicrophonePermission: () => Promise<boolean>;
+      permissions: {
+        getStatus: () => Promise<{
+          platform: string;
+          microphone: MediaPermissionStatus;
+          screen: MediaPermissionStatus;
+        }>;
+        requestMicrophone: () => Promise<boolean>;
+        openScreenSettings: () => Promise<boolean>;
+      };
       gemini: {
         listModels: (
           apiKey?: string,
@@ -143,6 +165,16 @@ declare global {
         }) => Promise<string>;
         load: (filePath: string) => Promise<{ data: Uint8Array; mimeType: string } | null>;
         delete: (meetingId: string) => Promise<void>;
+      };
+      logs: {
+        list: () => Promise<LogEntry[]>;
+        clear: () => Promise<void>;
+        push: (entry: {
+          level: LogLevel;
+          source: string;
+          message: string;
+          detail?: string;
+        }) => Promise<void>;
       };
       screenshot: {
         region: () => Promise<{ supported: false } | { supported: true; dataUrl: string | null }>;
