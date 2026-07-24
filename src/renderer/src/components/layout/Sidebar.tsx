@@ -20,6 +20,8 @@ import {
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { SettingsModal } from './SettingsModal';
+import { InstructionsManagerModal } from './InstructionsManagerModal';
+import { BookOpen } from 'lucide-react';
 
 type SidebarProps = {
   meetings: Meeting[];
@@ -54,6 +56,7 @@ export function Sidebar({
   const [editTitle, setEditTitle] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isInstructionsOpen, setIsInstructionsOpen] = useState(false);
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null); // null means 'All'
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
@@ -202,6 +205,7 @@ export function Sidebar({
   return (
     <>
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
+      <InstructionsManagerModal isOpen={isInstructionsOpen} onClose={() => setIsInstructionsOpen(false)} />
       {!isOpen && (
         <button
           onClick={handleOpen}
@@ -271,6 +275,15 @@ export function Sidebar({
                 User Settings
               </span>
               <Settings size={16} className="text-ink group-hover:text-accent shrink-0" />
+            </button>
+            <button
+              onClick={() => setIsInstructionsOpen(true)}
+              className="group mb-3 flex w-full cursor-pointer items-center justify-between"
+            >
+              <span className="text-ink group-hover:text-accent text-[0.9rem] font-bold transition-colors">
+                Instructions
+              </span>
+              <BookOpen size={16} className="text-ink group-hover:text-accent shrink-0" />
             </button>
             <button
               onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}

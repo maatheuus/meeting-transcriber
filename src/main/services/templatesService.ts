@@ -1,15 +1,12 @@
 import { getDb } from '../db/connection';
 
-export type TemplateSection = { id: number; title: string; instructions: string };
-
 export type TemplateDTO = {
   id: string;
   name: string;
   icon: string;
   isDefault?: boolean;
   isBuiltin?: boolean;
-  context?: string;
-  format?: TemplateSection[];
+  prompt?: string;
 };
 
 const BUILTIN_TEMPLATES: TemplateDTO[] = [
@@ -30,11 +27,22 @@ type TemplateRow = {
 };
 
 function toDTO(row: TemplateRow): TemplateDTO {
-  let body: { context?: string; format?: TemplateSection[] } = {};
+  let body: any = {};
   try {
     body = row.instructions ? JSON.parse(row.instructions) : {};
   } catch {
     body = {};
+  }
+
+  // Gracefully migrate old format
+  let prompt = body.prompt;
+  if (!prompt && (body.context || body.format)) {
+    const parts: string[] = [];
+    if (body.context) parts.push(`Context: ${body.context}`);
+    if (body.format?.length) {
+      parts.push('Use exactly these sections:\n' + body.format.map((s: any) => `- ${s.title || 'Section'}: ${s.instructions}`).join('\n'));
+    }
+    prompt = parts.join('\n\n');
   }
 
   return {
@@ -43,8 +51,7 @@ function toDTO(row: TemplateRow): TemplateDTO {
     icon: row.icon,
     ...(row.is_default ? { isDefault: true } : {}),
     ...(row.is_builtin ? { isBuiltin: true } : {}),
-    ...(body.context ? { context: body.context } : {}),
-    ...(body.format?.length ? { format: body.format } : {}),
+    ...(prompt ? { prompt } : {}),
   };
 }
 
@@ -73,7 +80,7 @@ export function replaceAll(templates: TemplateDTO[]): TemplateDTO[] {
     );
 
     templates.forEach((template, index) => {
-      const body = JSON.stringify({ context: template.context, format: template.format });
+      const body = JSON.stringify({ prompt: template.prompt });
       insert.run(
         template.id,
         template.name,
